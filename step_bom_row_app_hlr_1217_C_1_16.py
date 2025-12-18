@@ -17,12 +17,16 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 
 from OCP.STEPControl import STEPControl_Reader
-# ---- BRepGProp (Volume) OCP compatibility (pythonocc-core vs cadquery-ocp) ----
+# ---- BRepGProp (Volume) ----
 try:
+    # pythonocc-core style
     from OCP.BRepGProp import brepgprop_VolumeProperties
 except Exception:
-    from OCP.BRepGProp import brepgprop
-    brepgprop_VolumeProperties = brepgprop.VolumeProperties
+    # cadquery-ocp style
+    from OCP.BRepGProp import BRepGProp
+
+    def brepgprop_VolumeProperties(shape, props):
+        return BRepGProp.VolumeProperties(shape, props)
 
 from OCP.GProp import GProp_GProps
 from OCP.gp import gp_Dir, gp_Pnt, gp_Ax2
