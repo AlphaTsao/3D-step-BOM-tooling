@@ -2,4 +2,4 @@ streamlit
 pandas
 matplotlib
 openpyxl
-cadquery-ocp
+cadquery-ocp>=7.7
