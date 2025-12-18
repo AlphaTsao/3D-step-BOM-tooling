@@ -18,14 +18,43 @@ from matplotlib.collections import LineCollection
 
 from OCP.STEPControl import STEPControl_Reader
 # ---- BRepGProp (Volume) ----
-try:
-    # pythonocc-core style wrapper
-    from OCP.BRepGProp import brepgprop_VolumeProperties
-except Exception:
-    # cadquery-ocp style
-    from OCP.BRepGProp import BRepGProp
-    def brepgprop_VolumeProperties(shape, props):
-        return BRepGProp.VolumeProperties(shape, props)
+def _volume_properties(shape, props):
+    """Call OpenCascade volume properties in a way that works for both
+    pythonocc-core and cadquery-ocp (OCP).
+
+    Different wheels expose different symbols (e.g. brepgprop_VolumeProperties,
+    VolumeProperties, VolumeProperties_1 ...). We discover and call what exists.
+    """
+    # 1) pythonocc-core style wrapper
+    try:
+        from OCP.BRepGProp import brepgprop_VolumeProperties as _fn
+        _fn(shape, props)
+        return
+    except Exception:
+        pass
+
+    # 2) cadquery-ocp / OCP style: discover any callable containing 'VolumeProperties'
+    import OCP.BRepGProp as _bg
+
+    for name, obj in vars(_bg).items():
+        if "VolumeProperties" in name and callable(obj):
+            try:
+                obj(shape, props)
+                return
+            except Exception:
+                continue
+
+    cls = getattr(_bg, "BRepGProp", None)
+    if cls is not None:
+        for name, obj in vars(cls).items():
+            if "VolumeProperties" in name and callable(obj):
+                try:
+                    obj(shape, props)
+                    return
+                except Exception:
+                    continue
+
+    raise ImportError("Cannot find a usable VolumeProperties function in OCP.BRepGProp")
 
 from OCP.GProp import GProp_GProps
 from OCP.gp import gp_Dir, gp_Pnt, gp_Ax2
@@ -576,7 +605,7 @@ def load_shape_from_step(path: str):
 
 def compute_volume_mm3(shape) -> float:
     props = GProp_GProps()
-    brepgprop_VolumeProperties(shape, props)
+    _volume_properties(shape, props)
     return float(props.Mass())
 
 
