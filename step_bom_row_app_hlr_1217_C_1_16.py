@@ -19,12 +19,11 @@ from matplotlib.collections import LineCollection
 from OCP.STEPControl import STEPControl_Reader
 # ---- BRepGProp (Volume) ----
 try:
-    # pythonocc-core style
+    # pythonocc-core style wrapper
     from OCP.BRepGProp import brepgprop_VolumeProperties
 except Exception:
     # cadquery-ocp style
     from OCP.BRepGProp import BRepGProp
-
     def brepgprop_VolumeProperties(shape, props):
         return BRepGProp.VolumeProperties(shape, props)
 
@@ -40,12 +39,24 @@ try:
     from OCP.Bnd import Bnd_OBB
 except Exception:
     Bnd_OBB = None
-from OCP.BRepBndLib import brepbndlib_Add
+# ---- BRepBndLib (Bounding) ----
+try:
+    from OCP.BRepBndLib import brepbndlib_Add
+except Exception:
+    from OCP.BRepBndLib import BRepBndLib
+    def brepbndlib_Add(shape, box):
+        return BRepBndLib.Add(shape, box)
+
 try:
     from OCP.BRepBndLib import brepbndlib_AddOBB
 except Exception:
-    brepbndlib_AddOBB = None
-
+    try:
+        from OCP.BRepBndLib import BRepBndLib
+        def brepbndlib_AddOBB(shape, obb, *args):
+            # cadquery-ocp sometimes exposes AddOBB
+            return BRepBndLib.AddOBB(shape, obb, *args)
+    except Exception:
+        brepbndlib_AddOBB = None
 
 # ---------------- UI knobs ----------------
 IMAGE_WIDTH_PX = 85
