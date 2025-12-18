@@ -16,23 +16,23 @@ import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 
-from OCC.Core.STEPControl import STEPControl_Reader
-from OCC.Core.BRepGProp import brepgprop_VolumeProperties
-from OCC.Core.GProp import GProp_GProps
-from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Ax2
-from OCC.Core.HLRAlgo import HLRAlgo_Projector
-from OCC.Core.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
-from OCC.Core.TopExp import TopExp_Explorer
-from OCC.Core.TopAbs import TopAbs_EDGE
-from OCC.Core.BRepAdaptor import BRepAdaptor_Curve
-from OCC.Core.Bnd import Bnd_Box
+from OCP.STEPControl import STEPControl_Reader
+from OCP.BRepGProp import brepgprop_VolumeProperties
+from OCP.GProp import GProp_GProps
+from OCP.gp import gp_Dir, gp_Pnt, gp_Ax2
+from OCP.HLRAlgo import HLRAlgo_Projector
+from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
+from OCP.TopExp import TopExp_Explorer
+from OCP.TopAbs import TopAbs_EDGE
+from OCP.BRepAdaptor import BRepAdaptor_Curve
+from OCP.Bnd import Bnd_Box
 try:
-    from OCC.Core.Bnd import Bnd_OBB
+    from OCP.Bnd import Bnd_OBB
 except Exception:
     Bnd_OBB = None
-from OCC.Core.BRepBndLib import brepbndlib_Add
+from OCP.BRepBndLib import brepbndlib_Add
 try:
-    from OCC.Core.BRepBndLib import brepbndlib_AddOBB
+    from OCP.BRepBndLib import brepbndlib_AddOBB
 except Exception:
     brepbndlib_AddOBB = None
 
