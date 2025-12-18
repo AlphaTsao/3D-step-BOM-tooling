@@ -69,23 +69,102 @@ try:
 except Exception:
     Bnd_OBB = None
 # ---- BRepBndLib (Bounding) ----
-try:
-    from OCP.BRepBndLib import brepbndlib_Add
-except Exception:
-    from OCP.BRepBndLib import BRepBndLib
-    def brepbndlib_Add(shape, box):
-        return BRepBndLib.Add(shape, box)
+# cadquery-ocp / pythonocc-core have slightly different symbol exports.
+# We provide robust wrappers that try multiple candidate callables at runtime.
 
-try:
-    from OCP.BRepBndLib import brepbndlib_AddOBB
-except Exception:
+def _pick_callables(module_or_cls, name_hints):
+    out = []
+    for n in name_hints:
+        obj = getattr(module_or_cls, n, None)
+        if callable(obj):
+            out.append(obj)
+    # also scan for anything containing 'Add' / 'OBB'
     try:
-        from OCP.BRepBndLib import BRepBndLib
-        def brepbndlib_AddOBB(shape, obb, *args):
-            # cadquery-ocp sometimes exposes AddOBB
-            return BRepBndLib.AddOBB(shape, obb, *args)
+        for n in dir(module_or_cls):
+            if any(h in n for h in ("Add", "OBB")):
+                obj = getattr(module_or_cls, n, None)
+                if callable(obj):
+                    out.append(obj)
     except Exception:
-        brepbndlib_AddOBB = None
+        pass
+    # de-dup while keeping order
+    seen = set()
+    uniq = []
+    for f in out:
+        fid = id(f)
+        if fid not in seen:
+            uniq.append(f)
+            seen.add(fid)
+    return uniq
+
+
+def brepbndlib_Add(shape, box):
+    """Add shape to Bnd_Box (AABB)."""
+    last_err = None
+    try:
+        # pythonocc-core style
+        from OCP.BRepBndLib import brepbndlib_Add as _f
+        return _f(shape, box)
+    except Exception as e:
+        last_err = e
+
+    try:
+        import OCP.BRepBndLib as _m
+    except Exception as e:
+        raise ImportError("Cannot import OCP.BRepBndLib") from e
+
+    cands = []
+    cands += _pick_callables(_m, ("brepbndlib_Add", "Add", "Add_1", "Add_2", "add"))
+    cls = getattr(_m, "BRepBndLib", None)
+    if cls is not None:
+        cands += _pick_callables(cls, ("Add", "Add_1", "Add_2", "add"))
+
+    for f in cands:
+        try:
+            return f(shape, box)
+        except Exception as e:
+            last_err = e
+            continue
+
+    raise AttributeError("No compatible BRepBndLib Add(...) found") from last_err
+
+
+def brepbndlib_AddOBB(shape, obb, *args):
+    """Add shape to Bnd_OBB when available."""
+    last_err = None
+    try:
+        from OCP.BRepBndLib import brepbndlib_AddOBB as _f
+        return _f(shape, obb, *args)
+    except Exception as e:
+        last_err = e
+
+    try:
+        import OCP.BRepBndLib as _m
+    except Exception:
+        return None
+
+    cands = []
+    cands += _pick_callables(_m, ("brepbndlib_AddOBB", "AddOBB", "AddOBB_1", "AddOBB_2"))
+    cls = getattr(_m, "BRepBndLib", None)
+    if cls is not None:
+        cands += _pick_callables(cls, ("AddOBB", "AddOBB_1", "AddOBB_2"))
+
+    for f in cands:
+        try:
+            return f(shape, obb, *args)
+        except TypeError:
+            # try without extra args
+            try:
+                return f(shape, obb)
+            except Exception as e2:
+                last_err = e2
+                continue
+        except Exception as e:
+            last_err = e
+            continue
+
+    return None
+
 
 # ---------------- UI knobs ----------------
 IMAGE_WIDTH_PX = 85
