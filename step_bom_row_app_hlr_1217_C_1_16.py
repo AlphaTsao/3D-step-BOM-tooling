@@ -143,6 +143,12 @@ def ensure_state():
         st.session_state["bom_version"] = 1
     if "tooling_version" not in st.session_state:
         st.session_state["tooling_version"] = 1
+    if "bom_count" not in st.session_state:
+        st.session_state["bom_count"] = 0
+    if "tooling_count" not in st.session_state:
+        st.session_state["tooling_count"] = 0
+    if "mode" not in st.session_state:
+        st.session_state["mode"] = "New BOM"  # 或你原本預設
 
 
 def esc(s) -> str:
