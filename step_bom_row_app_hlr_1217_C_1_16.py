@@ -40,6 +40,23 @@ def _has_openpyxl() -> bool:
         return False
     
 
+# --- Session-state hard init (Cloud first-run safe) ---
+_defaults = {
+    "new_bom_used": False,
+    "bom_context_ready": False,
+    "bom": [],
+    "tooling_list": [],
+    "project": "",
+    "engineer": "",
+    "bom_count": 0,
+    "tooling_count": 0,
+    "uploader_key": str(uuid4()),
+}
+for k, v in _defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+
 # =======================
 # OCP / cadquery-ocp compatibility (Streamlit Cloud friendly)
 # =======================
