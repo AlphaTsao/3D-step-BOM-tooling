@@ -32,6 +32,14 @@ def _safe_filename(s: str, default: str = "export") -> str:
     return s or default
 
 
+def _has_openpyxl() -> bool:
+    try:
+        import openpyxl  # noqa: F401
+        return True
+    except Exception:
+        return False
+    
+
 # =======================
 # OCP / cadquery-ocp compatibility (Streamlit Cloud friendly)
 # =======================
