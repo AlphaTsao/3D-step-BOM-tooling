@@ -206,6 +206,48 @@ if "new_bom_used" not in st.session_state:
     st.session_state["new_bom_used"] = False
 
 
+# ---- brepbndlib_Add compatibility wrapper (pythonocc vs cadquery-ocp) ----
+try:
+    from OCP.BRepBndLib import BRepBndLib
+except Exception:
+    BRepBndLib = None
+
+def brepbndlib_Add(shape, box):
+    """
+    Different OCP builds expose Add() in different places:
+    - pythonocc: brepbndlib_Add(shape, box)
+    - OCP: BRepBndLib.Add(shape, box) or BRepBndLib_Add(shape, box)
+    """
+    # A) Class style
+    if BRepBndLib is not None:
+        add = getattr(BRepBndLib, "Add", None)
+        if callable(add):
+            return add(shape, box)
+
+    # B) Function style symbol
+    try:
+        from OCP.BRepBndLib import BRepBndLib_Add
+        return BRepBndLib_Add(shape, box)
+    except Exception:
+        pass
+
+    # C) Last resort: search any callable containing 'Add' (rare)
+    try:
+        import OCP.BRepBndLib as _m
+        for name in dir(_m):
+            if name.lower().endswith("add"):
+                fn = getattr(_m, name, None)
+                if callable(fn):
+                    try:
+                        return fn(shape, box)
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+
+    raise RuntimeError("No usable BRepBndLib.Add() found in this OCP build")
+
+
 # ---------------- UI knobs ----------------
 IMAGE_WIDTH_PX = 85
 HEADER_HEIGHT_PX = 44
