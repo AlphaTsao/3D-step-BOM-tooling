@@ -52,6 +52,10 @@ def reset_bom():
     st.session_state["tooling_count"] = 0
     
 
+if "add_mode" not in st.session_state:
+    st.session_state["add_mode"] = ""   # 你原本就是拿來跟 "" 比較
+
+
 # --- Session-state hard init (Cloud first-run safe) ---
 _defaults = {
     "new_bom_used": False,
