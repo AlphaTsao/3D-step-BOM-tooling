@@ -1146,6 +1146,208 @@ def render_tooling_readonly(items: list[dict]) -> None:
     _render_html_table("🧰 Tooling List（只讀顯示）", columns, rows, row_h, HEADER_HEIGHT_PX)
 
 
+
+
+# ================= Cloud compatibility overrides (auto-generated) =================
+
+def ensure_state():
+    """Initialize Streamlit session_state keys (Cloud first-run safe)."""
+    ss = st.session_state
+    defaults = {
+        "project": "",
+        "engineer": "",
+        "mode": "New BOM",
+        "new_bom_used": False,
+        "bom_context_ready": False,
+        "add_mode": "Part",
+        "bom": [],
+        "tooling_list": [],
+        "process_text": "",
+        "bom_version": 1,
+        "tooling_version": 1,
+        "bom_count": 0,
+        "tooling_count": 0,
+        "uploader_key": str(uuid4()),
+        "part_pending_files": [],
+        "last_add_report": None,
+        "last_add_errors": [],
+        "subassy_uploader_key": str(uuid4()),
+        "subassy_parent_file": None,
+        "subassy_parent_id": None,
+        "subassy_parent_seq": 0,
+        "subassy_child_n": 0,
+        "subassy_child_files": [],
+        "subassy_child_meta": [],
+        "subassy_child_uploaded": 0,
+    }
+    for k, v in defaults.items():
+        if k not in ss:
+            ss[k] = v
+
+
+# ---------- STEP / geometry (OCP tolerant) ----------
+def load_shape_from_step(path: str):
+    reader = STEPControl_Reader()
+    status = reader.ReadFile(path)
+    if status != 1:
+        raise RuntimeError(f"STEP read failed, status={status}")
+    reader.TransferRoots()
+    return reader.OneShape()
+
+
+def _get_face_triangulation(face):
+    """Return (triangulation, location) or (None, None) across OCP builds."""
+    loc = TopLoc_Location()
+    for attr in ("Triangulation_s", "Triangulation"):
+        fn = getattr(BRep_Tool, attr, None)
+        if callable(fn):
+            try:
+                tri = fn(face, loc)
+                return tri, loc
+            except Exception:
+                pass
+    return None, None
+
+
+def _iter_mesh_triangles(shape, linear_deflection=0.1, angular_deflection=0.5):
+    """Yield triangles as 3 points (x,y,z) in mm."""
+    try:
+        BRepMesh_IncrementalMesh(shape, linear_deflection, False, angular_deflection, True)
+    except TypeError:
+        BRepMesh_IncrementalMesh(shape, linear_deflection)
+
+    exp = TopExp_Explorer(shape, TopAbs_FACE)
+    while exp.More():
+        face = TopoDS.Face_s(exp.Current())
+        tri, loc = _get_face_triangulation(face)
+        if tri is None:
+            exp.Next()
+            continue
+
+        nodes = tri.Nodes()
+        triangles = tri.Triangles()
+        tr_count = tri.NbTriangles()
+
+        for i in range(1, tr_count + 1):
+            t = triangles.Value(i)
+            i1, i2, i3 = t.Get()
+            p1 = nodes.Value(i1).Transformed(loc.Transformation())
+            p2 = nodes.Value(i2).Transformed(loc.Transformation())
+            p3 = nodes.Value(i3).Transformed(loc.Transformation())
+            yield (p1.X(), p1.Y(), p1.Z()), (p2.X(), p2.Y(), p2.Z()), (p3.X(), p3.Y(), p3.Z())
+        exp.Next()
+
+
+def _volume_mm3_from_mesh(shape) -> float:
+    vol = 0.0
+    for (x1,y1,z1),(x2,y2,z2),(x3,y3,z3) in _iter_mesh_triangles(shape):
+        vol += (x1*(y2*z3 - z2*y3) - y1*(x2*z3 - z2*x3) + z1*(x2*y3 - y2*x3)) / 6.0
+    return abs(vol)
+
+
+def _bbox_dims_mm_from_mesh(shape) -> tuple[float, float, float]:
+    xs=[]; ys=[]; zs=[]
+    for p1,p2,p3 in _iter_mesh_triangles(shape):
+        for x,y,z in (p1,p2,p3):
+            xs.append(x); ys.append(y); zs.append(z)
+    if not xs:
+        return 0.0, 0.0, 0.0
+    return max(xs)-min(xs), max(ys)-min(ys), max(zs)-min(zs)
+
+
+def compute_volume_mm3(shape) -> float:
+    """Volume in mm^3; approximate via mesh if exact route missing."""
+    try:
+        props = GProp_GProps()
+        fn = getattr(BRepGProp, "VolumeProperties", None) or globals().get("brepgprop_VolumeProperties")
+        if callable(fn):
+            fn(shape, props)
+            return float(props.Mass())
+    except Exception:
+        pass
+    return float(_volume_mm3_from_mesh(shape))
+
+
+def compute_bbox_dims_mm(shape) -> tuple[float, float, float]:
+    dx, dy, dz = _bbox_dims_mm_from_mesh(shape)
+    return max(0.0, float(dx)), max(0.0, float(dy)), max(0.0, float(dz))
+
+
+def make_hlr_png_bytes(
+    shape,
+    dpi=200,
+    fig_size=4,
+    outline_width=1.8,
+    edge_width=0.9,
+    color="#2f2f2f",
+    sample_n=60,
+) -> bytes:
+    """HLR preview as PNG bytes (robust across OCP builds)."""
+
+    def _as_edge(s):
+        try:
+            return TopoDS.Edge_s(s)
+        except Exception:
+            try:
+                return topods.Edge(s)
+            except Exception:
+                return TopoDS.TopoDS_Edge(s)
+
+    view_dir = gp_Dir(1, -1, 1)
+    projector = HLRAlgo_Projector(gp_Ax2(gp_Pnt(0, 0, 0), view_dir))
+
+    algo = HLRBRep_Algo()
+    algo.Add(shape)
+    algo.Projector(projector)
+    algo.Update()
+    algo.Hide()
+
+    hlr = HLRBRep_HLRToShape(algo)
+    layers = [(hlr.OutLineVCompound(), outline_width), (hlr.VCompound(), edge_width)]
+
+    fig, ax = plt.subplots(figsize=(fig_size, fig_size))
+    any_line = False
+
+    for comp, lw in layers:
+        segs = []
+        exp = TopExp_Explorer(comp, TopAbs_EDGE)
+        while exp.More():
+            edge = _as_edge(exp.Current())
+            adaptor = BRepAdaptor_Curve(edge)
+            first = float(adaptor.FirstParameter())
+            last = float(adaptor.LastParameter())
+            if not (last > first):
+                exp.Next()
+                continue
+
+            pts = []
+            for i in range(sample_n + 1):
+                t = first + (last - first) * i / sample_n
+                p = adaptor.Value(t)
+                pts.append([p.X(), p.Y()])
+
+            if len(pts) >= 2:
+                segs.append(pts)
+                any_line = True
+            exp.Next()
+
+        if segs:
+            ax.add_collection(LineCollection(segs, colors=color, linewidths=lw))
+
+    if not any_line:
+        raise RuntimeError("No HLR edges generated")
+
+    ax.autoscale()
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight", pad_inches=0.02, transparent=True)
+    plt.close(fig)
+    return buf.getvalue()
+
+# ================= End overrides =================
+
 # ================= APP =================
 st.set_page_config(page_title="STEP BOM + Tooling List", page_icon="📐", layout="wide")
 ensure_state()
