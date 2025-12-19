@@ -127,8 +127,12 @@ from OCP.HLRBRep import HLRBRep_Algo, HLRBRep_HLRToShape
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopAbs import TopAbs_EDGE
 from OCP.BRepAdaptor import BRepAdaptor_Curve
-from OCP.TopoDS import TopoDS
 from OCP.Bnd import Bnd_Box
+from OCP.BRepMesh import BRepMesh_IncrementalMesh
+from OCP.BRep import BRep_Tool
+from OCP.TopAbs import TopAbs_FACE
+from OCP.TopLoc import TopLoc_Location
+from OCP.TopoDS import TopoDS
 try:
     from OCP.Bnd import Bnd_OBB
 except Exception:
@@ -563,9 +567,20 @@ def load_shape_from_step(path: str):
 
 
 def compute_volume_mm3(shape) -> float:
-    props = GProp_GProps()
-    brepgprop_VolumeProperties(shape, props)
-    return float(props.Mass())
+    """
+    Robust volume computation.
+    - Prefer BRepGProp if available
+    - Fallback to mesh-based volume for cadquery-ocp Cloud builds
+    """
+    try:
+        props = GProp_GProps()
+        brepgprop_VolumeProperties(shape, props)
+        v = float(props.Mass())
+        if v > 0:
+            return v
+        raise RuntimeError("BRepGProp returned non-positive volume")
+    except Exception:
+        return _volume_mm3_from_mesh(shape)
 
 
 def compute_bbox_dims_mm(shape) -> tuple[float, float, float]:
