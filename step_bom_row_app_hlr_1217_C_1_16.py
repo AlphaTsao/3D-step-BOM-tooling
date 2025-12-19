@@ -590,6 +590,34 @@ from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS
 from OCP.TopExp import TopExp_Explorer
 
+def _get_face_triangulation(face, loc):
+    # A) static method
+    try:
+        return BRep_Tool.Triangulation(face, loc)
+    except Exception:
+        pass
+
+    # B) instance method
+    try:
+        return BRep_Tool().Triangulation(face, loc)
+    except Exception:
+        pass
+
+    # C) BRepTools
+    try:
+        from OCP.BRepTools import BRepTools
+        return BRepTools.Triangulation(face, loc)
+    except Exception:
+        pass
+
+    # D) function-style binding
+    try:
+        from OCP.BRep import BRep_Tool_Triangulation
+        return BRep_Tool_Triangulation(face, loc)
+    except Exception:
+        pass
+
+    return None
 
 def _volume_mm3_from_mesh(shape, deflection=0.5) -> float:
     """
@@ -610,7 +638,7 @@ def _volume_mm3_from_mesh(shape, deflection=0.5) -> float:
     exp = TopExp_Explorer(shape, TopAbs_FACE)
     while exp.More():
         face = TopoDS.Face_s(exp.Current())
-        tri = BRep_Tool.Triangulation(face, loc)
+        tri = _get_face_triangulation(face, loc)
         if tri is None:
             exp.Next()
             continue
