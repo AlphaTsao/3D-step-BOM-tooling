@@ -87,6 +87,11 @@ def brepbndlib_AddOBB(shape, obb, *flags):
     raise AttributeError("No usable AddOBB function found in OCP.BRepBndLib")
 
 
+# --- Session-state hard init (Cloud first-run safe) ---
+if "new_bom_used" not in st.session_state:
+    st.session_state["new_bom_used"] = False
+
+
 # ---------------- UI knobs ----------------
 IMAGE_WIDTH_PX = 85
 HEADER_HEIGHT_PX = 44
