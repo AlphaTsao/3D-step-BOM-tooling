@@ -361,14 +361,14 @@ def compute_bbox_dims_mm(shape) -> tuple[float, float, float]:
     except Exception:
         pass
 
-    # 2) AABB fallback
-    box = Bnd_Box()
-    brepbndlib_Add(shape, box)
-    xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
-    dx = max(0.0, float(xmax - xmin))
-    dy = max(0.0, float(ymax - ymin))
-    dz = max(0.0, float(zmax - zmin))
-    return dx, dy, dz
+    # 2) AABB fallback (mesh-based, robust on Streamlit Cloud OCP builds)
+    try:
+        dx, dy, dz = _bbox_mm_from_mesh(shape, deflection=0.5)
+        return dx, dy, dz
+    except Exception:
+        pass
+
+    return 0.0, 0.0, 0.0
 
 
 # ---------------- HLR render ----------------
@@ -606,6 +606,41 @@ def load_shape_from_step(path: str):
         raise RuntimeError(f"STEP read failed, status={status}")
     reader.TransferRoots()
     return reader.OneShape()
+
+def _bbox_mm_from_mesh(shape, deflection=0.5):
+    # 產生 mesh
+    try:
+        BRepMesh_IncrementalMesh(shape, deflection, False, 0.5, True)
+    except TypeError:
+        BRepMesh_IncrementalMesh(shape, deflection)
+
+    xmin = ymin = zmin = float("inf")
+    xmax = ymax = zmax = float("-inf")
+
+    loc = TopLoc_Location()
+    exp = TopExp_Explorer(shape, TopAbs_FACE)
+    while exp.More():
+        face = TopoDS.Face_s(exp.Current())
+        tri = _get_face_triangulation(face, loc)
+        if tri is None:
+            exp.Next()
+            continue
+
+        nodes = tri.Nodes()
+        trsf = loc.Transformation()
+
+        for i in range(1, nodes.Length() + 1):
+            p = nodes.Value(i).Transformed(trsf)
+            x, y, z = p.X(), p.Y(), p.Z()
+            xmin = min(xmin, x); ymin = min(ymin, y); zmin = min(zmin, z)
+            xmax = max(xmax, x); ymax = max(ymax, y); zmax = max(zmax, z)
+
+        exp.Next()
+
+    if xmin == float("inf"):
+        return 0.0, 0.0, 0.0
+
+    return max(0.0, xmax - xmin), max(0.0, ymax - ymin), max(0.0, zmax - zmin)
 
 
 def compute_volume_mm3(shape) -> float:
