@@ -56,6 +56,42 @@ if "add_mode" not in st.session_state:
     st.session_state["add_mode"] = ""   # 你原本就是拿來跟 "" 比較
 
 
+from uuid import uuid4  # 若你檔案前面已經 import 過就不用再加
+
+# --- Session-state hard init (Cloud first-run safe) ---
+_defaults = {
+    # flow control
+    "mode": "New BOM",
+    "new_bom_used": False,
+    "bom_context_ready": False,
+    "add_mode": "",
+
+    # core data
+    "bom": [],
+    "tooling_list": [],
+
+    # context
+    "project": "",
+    "engineer": "",
+
+    # counters / versions
+    "bom_count": 0,
+    "tooling_count": 0,
+    "bom_version": 1,
+    "tooling_version": 1,
+
+    # upload buffers
+    "part_pending_files": [],
+    "subassy_pending_files": [],
+
+    # widget keys (avoid uploader stuck)
+    "uploader_key": str(uuid4()),
+}
+for k, v in _defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+
 # --- Session-state hard init (Cloud first-run safe) ---
 _defaults = {
     "new_bom_used": False,
