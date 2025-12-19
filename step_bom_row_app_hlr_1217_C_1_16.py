@@ -16,6 +16,22 @@ import streamlit.components.v1 as components
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 
+
+import re
+
+def _safe_filename(s: str, default: str = "export") -> str:
+    """Make a filesystem-safe filename (no path separators / special chars)."""
+    s = "" if s is None else str(s).strip()
+    if not s:
+        return default
+    # replace illegal characters
+    s = re.sub(r'[\\/:*?"<>|\n\r\t]+', "_", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    # avoid trailing dots/spaces (Windows)
+    s = s.rstrip(". ")
+    return s or default
+
+
 # =======================
 # OCP / cadquery-ocp compatibility (Streamlit Cloud friendly)
 # =======================
