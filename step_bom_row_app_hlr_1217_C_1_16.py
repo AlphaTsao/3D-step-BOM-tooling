@@ -581,6 +581,65 @@ def compute_volume_mm3(shape) -> float:
         raise RuntimeError("BRepGProp returned non-positive volume")
     except Exception:
         return _volume_mm3_from_mesh(shape)
+    
+    
+from OCP.BRepMesh import BRepMesh_IncrementalMesh
+from OCP.BRep import BRep_Tool
+from OCP.TopAbs import TopAbs_FACE
+from OCP.TopLoc import TopLoc_Location
+from OCP.TopoDS import TopoDS
+from OCP.TopExp import TopExp_Explorer
+
+
+def _volume_mm3_from_mesh(shape, deflection=0.5) -> float:
+    """
+    Robust volume computation using triangulation.
+    Works even when OCP.BRepGProp VolumeProperties API is missing.
+    Units: model units (typically mm) => returns mm^3.
+    """
+    # 1) Build mesh (triangulation)
+    try:
+        BRepMesh_IncrementalMesh(shape, deflection, False, 0.5, True)
+    except TypeError:
+        # Older signature
+        BRepMesh_IncrementalMesh(shape, deflection)
+
+    total = 0.0
+    loc = TopLoc_Location()
+
+    exp = TopExp_Explorer(shape, TopAbs_FACE)
+    while exp.More():
+        face = TopoDS.Face_s(exp.Current())
+        tri = BRep_Tool.Triangulation(face, loc)
+        if tri is None:
+            exp.Next()
+            continue
+
+        nodes = tri.Nodes()
+        triangles = tri.Triangles()
+        trsf = loc.Transformation()
+
+        for i in range(1, triangles.Length() + 1):
+            t = triangles.Value(i)
+            n1, n2, n3 = t.Get()
+
+            p1 = nodes.Value(n1).Transformed(trsf)
+            p2 = nodes.Value(n2).Transformed(trsf)
+            p3 = nodes.Value(n3).Transformed(trsf)
+
+            x1, y1, z1 = p1.X(), p1.Y(), p1.Z()
+            x2, y2, z2 = p2.X(), p2.Y(), p2.Z()
+            x3, y3, z3 = p3.X(), p3.Y(), p3.Z()
+
+            # Signed tetrahedron volume relative to origin
+            cx = y2 * z3 - z2 * y3
+            cy = z2 * x3 - x2 * z3
+            cz = x2 * y3 - y2 * x3
+            total += (x1 * cx + y1 * cy + z1 * cz) / 6.0
+
+        exp.Next()
+
+    return abs(float(total))
 
 
 def compute_bbox_dims_mm(shape) -> tuple[float, float, float]:
