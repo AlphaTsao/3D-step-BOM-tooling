@@ -138,46 +138,63 @@ from OCP import BRepGProp as _BRepGProp_mod
 from OCP import BRepBndLib as _BRepBndLib_mod
 
 def brepgprop_VolumeProperties(shape, props):
-    # Prefer pythonocc-style wrapper name if present
+    """
+    cadquery-ocp / pythonocc variants:
+    - Some expose brepgprop_VolumeProperties
+    - Some expose VolumeProperties / BRepGProp_VolumeProperties
+    - Signatures vary (extra boolean flags / eps)
+    """
+    # 1) direct known name
     fn = getattr(_BRepGProp_mod, "brepgprop_VolumeProperties", None)
     if callable(fn):
         return fn(shape, props)
-    # cadquery-ocp wheels vary: scan for any callable containing "VolumeProperties"
+
+    # 2) search candidates
+    candidates = []
     for name in dir(_BRepGProp_mod):
         if "VolumeProperties" in name:
-            cand = getattr(_BRepGProp_mod, name)
+            cand = getattr(_BRepGProp_mod, name, None)
             if callable(cand):
-                try:
-                    return cand(shape, props)
-                except Exception:
-                    continue
-    raise AttributeError("No usable VolumeProperties function found in OCP.BRepGProp")
+                candidates.append((name, cand))
 
-def brepbndlib_Add(shape, box):
-    for name in ("brepbndlib_Add", "Add", "Add_1"):
-        fn = getattr(_BRepBndLib_mod, name, None)
-        if callable(fn):
-            try:
-                return fn(shape, box)
-            except Exception:
-                continue
-    raise AttributeError("No usable Add function found in OCP.BRepBndLib")
+    # 3) try common signatures
+    sig_tries = [
+        (shape, props),
+        (shape, props, True),
+        (shape, props, False),
+        (shape, props, 1e-6),
+        (shape, props, 1e-5),
+        (shape, props, True, True),
+        (shape, props, True, True, True),
+    ]
 
-def brepbndlib_AddOBB(shape, obb, *flags):
-    for name in ("brepbndlib_AddOBB", "AddOBB", "AddOBB_1"):
-        fn = getattr(_BRepBndLib_mod, name, None)
-        if callable(fn):
-            # Try the various signatures seen across builds
+    last_err = None
+    for name, cand in candidates:
+        for args in sig_tries:
             try:
-                return fn(shape, obb, *flags)
-            except TypeError:
-                try:
-                    return fn(shape, obb)
-                except Exception:
-                    continue
-            except Exception:
+                return cand(*args)
+            except Exception as e:
+                last_err = e
                 continue
-    raise AttributeError("No usable AddOBB function found in OCP.BRepBndLib")
+
+    # 4) final: explicit import style (some builds put function on class-like symbol)
+    # e.g. OCP.BRepGProp.BRepGProp.VolumeProperties(...)
+    try:
+        cls = getattr(_BRepGProp_mod, "BRepGProp", None)
+        if cls is not None:
+            for mname in ("VolumeProperties", "BRepGProp_VolumeProperties"):
+                m = getattr(cls, mname, None)
+                if callable(m):
+                    for args in sig_tries:
+                        try:
+                            return m(*args)
+                        except Exception as e:
+                            last_err = e
+                            continue
+    except Exception as e:
+        last_err = e
+
+    raise RuntimeError(f"No usable VolumeProperties found in OCP.BRepGProp (last_err={last_err})")
 
 
 # --- Session-state hard init (Cloud first-run safe) ---
