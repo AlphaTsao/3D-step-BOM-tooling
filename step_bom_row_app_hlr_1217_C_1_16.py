@@ -38,6 +38,18 @@ def _has_openpyxl() -> bool:
         return True
     except Exception:
         return False
+
+
+def reset_bom():
+    # 清空 BOM / Tooling 相關狀態，回到「尚未建立 BOM」的初始狀態
+    st.session_state["bom"] = []
+    st.session_state["tooling_list"] = []
+    st.session_state["bom_context_ready"] = False
+    st.session_state["new_bom_used"] = False
+
+    # 版本/計數（若你有用到）
+    st.session_state["bom_count"] = 0
+    st.session_state["tooling_count"] = 0
     
 
 # --- Session-state hard init (Cloud first-run safe) ---
